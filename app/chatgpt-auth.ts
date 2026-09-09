@@ -17,12 +17,23 @@ const PERCENT_ENCODED_UTF8 = "percent-encoded-utf-8";
 const SIGN_IN_PATH = "/signin-with-chatgpt";
 const SIGN_OUT_PATH = "/signout-with-chatgpt";
 const CALLBACK_PATH = "/callback";
+const PUBLIC_DEMO_USER: ChatGPTUser = {
+  userId: "public-demo-user",
+  displayName: "Demo visitor",
+  email: "demo@dcfvision.local",
+  fullName: "Demo visitor",
+};
+
+// Vercel hosts the shareable client demo outside the Sites ChatGPT auth
+// gateway. Keep the real auth flow everywhere else, but let client reviewers
+// open the demonstration workspace directly on the public deployment.
+const isPublicDemo = process.env.VERCEL === "1";
 
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
   const userId = requestHeaders.get(USER_ID_HEADER);
   const email = requestHeaders.get(USER_EMAIL_HEADER);
-  if (!userId || !email) return null;
+  if (!userId || !email) return isPublicDemo ? PUBLIC_DEMO_USER : null;
 
   const encodedFullName = requestHeaders.get(USER_FULL_NAME_HEADER);
   const fullName =

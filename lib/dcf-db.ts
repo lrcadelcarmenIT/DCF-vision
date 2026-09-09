@@ -2,19 +2,123 @@ import { ZodError } from "zod";
 import type { DashboardData, InspectionEvent, Organization, ProductionLine } from "./dcf-demo";
 
 const env = (globalThis as typeof globalThis & { env?: { DB?: D1Database } }).env;
+const isPublicDemo = process.env.VERCEL === "1";
+
+type DemoOrganization = { id: string; owner_id: string; name: string; site: string; created_at: string };
+type DemoLine = { id: string; organization_id: string; name: string; code: string; product: string; status: string; target_rate: number; current_rate: number; quality_score: number; downtime_minutes: number; created_at: string };
+type DemoEvent = { id: string; organization_id: string; line_id: string; category: string; status: string; confidence: number; message: string; affected_units: number; created_at: string; source: string; scenario: string | null; expected: string | null; observed: string | null; review_status: string; review_note: string; reviewed_at: string | null; reviewed_by: string | null };
+
+const publicDemoState: { organizations: DemoOrganization[]; lines: DemoLine[]; events: DemoEvent[] } = {
+  organizations: [],
+  lines: [],
+  events: [],
+};
+const publicDemoOwner = "public-demo-user";
+const publicDemoDb = {
+  prepare(sql: string) {
+    let args: unknown[] = [];
+    const statement = {
+      bind(...values: unknown[]) { args = values; return statement; },
+      async first<T>() {
+        if (sql.includes("SELECT id FROM organizations WHERE owner_id")) {
+          return (publicDemoState.organizations.find(item => item.owner_id === args[0]) ?? null) as T | null;
+        }
+        if (sql.includes("SELECT id FROM organizations WHERE id = ? AND owner_id")) {
+          const row = publicDemoState.organizations.find(item => item.id === args[0] && item.owner_id === args[1]);
+          return (row ? { id: row.id } : null) as T | null;
+        }
+        if (sql.includes("SELECT id FROM production_lines WHERE id = ? AND organization_id")) {
+          const row = publicDemoState.lines.find(item => item.id === args[0] && item.organization_id === args[1]);
+          return (row ? { id: row.id } : null) as T | null;
+        }
+        if (sql.includes("COUNT(*) AS total")) {
+          const rows = publicDemoState.events.filter(item => item.organization_id === args[0]);
+          return { total: rows.length, passes: rows.filter(item => item.status === "pass").length, needsReview: rows.filter(item => item.status !== "pass" && item.review_status === "unreviewed").length, reviewed: rows.filter(item => item.review_status !== "unreviewed").length } as T;
+        }
+        if (sql.includes("SELECT id, scenario, line_id AS lineId")) {
+          const row = publicDemoState.events.find(item => item.id === args[0] && item.organization_id === args[1]);
+          return (row ? { id: row.id, scenario: row.scenario, lineId: row.line_id, createdAt: row.created_at } : null) as T | null;
+        }
+        if (sql.includes("SELECT review_status AS status")) {
+          const row = publicDemoState.events.find(item => item.id === args[0] && item.organization_id === args[1]);
+          return (row ? { status: row.review_status, note: row.review_note } : null) as T | null;
+        }
+        if (sql.includes("SELECT name, product, target_rate AS targetRate")) {
+          const row = publicDemoState.lines.find(item => item.id === args[0] && item.organization_id === args[1]);
+          return (row ? { name: row.name, product: row.product, targetRate: row.target_rate } : null) as T | null;
+        }
+        if (sql.includes("SELECT name, site FROM organizations")) {
+          const row = publicDemoState.organizations.find(item => item.id === args[0] && item.owner_id === args[1]);
+          return (row ? { name: row.name, site: row.site } : null) as T | null;
+        }
+        return null;
+      },
+      async all<T>() {
+        if (sql.includes("FROM organizations WHERE owner_id")) {
+          return { results: publicDemoState.organizations.filter(item => item.owner_id === args[0]).map(item => ({ id: item.id, name: item.name, site: item.site })) as T[] };
+        }
+        if (sql.includes("FROM production_lines WHERE organization_id")) {
+          return { results: publicDemoState.lines.filter(item => item.organization_id === args[0]).sort((a, b) => a.created_at.localeCompare(b.created_at)).map(item => ({ id: item.id, name: item.name, code: item.code, product: item.product, targetRate: item.target_rate })) as T[] };
+        }
+        if (sql.includes("FROM inspection_events e JOIN production_lines")) {
+          const rows = publicDemoState.events.filter(item => item.organization_id === args[0]).sort((a, b) => b.created_at.localeCompare(a.created_at));
+          return { results: rows.slice(0, 100).map(item => ({ id: item.id, lineId: item.line_id, lineName: publicDemoState.lines.find(line => line.id === item.line_id)?.name ?? "Demo line", category: item.category, status: item.status, message: item.message, affectedUnits: item.affected_units, createdAt: item.created_at, source: item.source, scenario: item.scenario, expected: item.expected, observed: item.observed, reviewStatus: item.review_status, reviewNote: item.review_note, reviewedAt: item.reviewed_at })) as T[] };
+        }
+        return { results: [] as T[] };
+      },
+      async run() {
+        if (sql.includes("INTO organizations")) {
+          const [id, owner_id, name, site, created_at] = args as [string, string, string, string, string];
+          if (publicDemoState.organizations.some(item => item.id === id)) return { meta: { changes: 0 } };
+          publicDemoState.organizations.push({ id, owner_id, name, site, created_at });
+          return { meta: { changes: 1 } };
+        }
+        if (sql.includes("INTO production_lines")) {
+          const [id, organization_id, name, code, product, status, target_rate, current_rate, quality_score, downtime_minutes, created_at] = args as [string, string, string, string, string, string, number, number, number, number, string];
+          if (publicDemoState.lines.some(item => item.id === id)) return { meta: { changes: 0 } };
+          publicDemoState.lines.push({ id, organization_id, name, code, product, status, target_rate, current_rate, quality_score, downtime_minutes, created_at });
+          return { meta: { changes: 1 } };
+        }
+        if (sql.includes("INSERT INTO inspection_events")) {
+          const [id, organization_id, line_id, category, status, confidence, message, affected_units, created_at, source, scenario, expected, observed] = args as [string, string, string, string, string, number, string, number, string, string, string, string, string];
+          if (publicDemoState.events.some(item => item.id === id)) return { meta: { changes: 0 } };
+          publicDemoState.events.push({ id, organization_id, line_id, category, status, confidence, message, affected_units, created_at, source, scenario, expected, observed, review_status: "unreviewed", review_note: "", reviewed_at: null, reviewed_by: null });
+          return { meta: { changes: 1 } };
+        }
+        if (sql.includes("UPDATE inspection_events SET review_status")) {
+          const [review_status, review_note, reviewed_at, reviewed_by, id, organization_id] = args as [string, string, string, string, string, string];
+          const row = publicDemoState.events.find(item => item.id === id && item.organization_id === organization_id && item.review_status === "unreviewed");
+          if (!row) return { meta: { changes: 0 } };
+          Object.assign(row, { review_status, review_note, reviewed_at, reviewed_by });
+          return { meta: { changes: 1 } };
+        }
+        return { meta: { changes: 0 } };
+      },
+    };
+    return statement;
+  },
+  async batch(statements: Array<{ run: () => Promise<unknown> }>) {
+    for (const statement of statements) await statement.run();
+    return [];
+  },
+} as unknown as D1Database;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 export function getDatabase(): D1Database {
   const db = env?.DB;
-  if (!db) throw new ApiError(503, "The workspace is temporarily unavailable. Please try again.");
-  return db;
+  if (db) return db;
+  if (isPublicDemo) return publicDemoDb;
+  throw new ApiError(503, "The workspace is temporarily unavailable. Please try again.");
 }
 /** Identity is supplied by Sites dispatch. Anonymous requests never share an owner. */
 export function getViewer(request: Request) {
   const id = request.headers.get("oai-authenticated-user-id")?.trim();
-  if (!id) throw new ApiError(401, "Please sign in to open your workspace.");
+  if (!id) {
+    if (isPublicDemo) return { id: publicDemoOwner };
+    throw new ApiError(401, "Please sign in to open your workspace.");
+  }
   return { id };
 }
 export function assertSameOrigin(request: Request) {

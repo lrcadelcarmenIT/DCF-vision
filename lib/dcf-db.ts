@@ -14,6 +14,15 @@ const publicDemoState: { organizations: DemoOrganization[]; lines: DemoLine[]; e
   events: [],
 };
 const publicDemoOwner = "public-demo-user";
+const publicDemoOrganizationId = "00000000-0000-4000-8000-000000000001";
+const publicDemoLineId = "00000000-0000-4000-8000-000000000002";
+function seedPublicDemo() {
+  if (!publicDemoState.organizations.length) {
+    const created_at = new Date().toISOString();
+    publicDemoState.organizations.push({ id: publicDemoOrganizationId, owner_id: publicDemoOwner, name: "Demonstration plant", site: "Sample facility", created_at });
+    publicDemoState.lines.push({ id: publicDemoLineId, organization_id: publicDemoOrganizationId, name: "Packaging line 01", code: "PKG-01", product: "Six-piece dumpling trays", status: "setup", target_rate: 120, current_rate: 0, quality_score: 0, downtime_minutes: 0, created_at });
+  }
+}
 const publicDemoDb = {
   prepare(sql: string) {
     let args: unknown[] = [];
@@ -109,7 +118,10 @@ export class ApiError extends Error {
 export function getDatabase(): D1Database {
   const db = env?.DB;
   if (db) return db;
-  if (isPublicDemo) return publicDemoDb;
+  if (isPublicDemo) {
+    seedPublicDemo();
+    return publicDemoDb;
+  }
   throw new ApiError(503, "The workspace is temporarily unavailable. Please try again.");
 }
 /** Identity is supplied by Sites dispatch. Anonymous requests never share an owner. */

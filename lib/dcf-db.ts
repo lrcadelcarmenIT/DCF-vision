@@ -1,6 +1,7 @@
-import { env } from "cloudflare:workers";
 import { ZodError } from "zod";
 import type { DashboardData, InspectionEvent, Organization, ProductionLine } from "./dcf-demo";
+
+const env = (globalThis as typeof globalThis & { env?: { DB?: D1Database } }).env;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }

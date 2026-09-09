@@ -1,6 +1,7 @@
-import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./schema";
+
+const env = (globalThis as typeof globalThis & { env?: { DB?: D1Database } }).env;
 
 export function getDb() {
   if (!env.DB) {

@@ -38,7 +38,7 @@ const db = {
     catch (error) { sqlite.exec("ROLLBACK"); throw error; }
   },
 };
-const context = vm.createContext({ Request, Response, URL, TextEncoder, TextDecoder, crypto: webcrypto, console, setTimeout, clearTimeout });
+const context = vm.createContext({ Request, Response, URL, TextEncoder, TextDecoder, crypto: webcrypto, console, setTimeout, clearTimeout, env: { DB: db } });
 const modules = new Map();
 function synthetic(name, exports) { return new vm.SyntheticModule(Object.keys(exports), function() { for (const [key, value] of Object.entries(exports)) this.setExport(key, value); }, { context, identifier: name }); }
 modules.set("cloudflare:workers", synthetic("cloudflare:workers", { env: { DB: db } }));

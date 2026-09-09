@@ -2,7 +2,7 @@ import { ZodError } from "zod";
 import type { DashboardData, InspectionEvent, Organization, ProductionLine } from "./dcf-demo";
 
 const env = (globalThis as typeof globalThis & { env?: { DB?: D1Database } }).env;
-const isPublicDemo = process.env.VERCEL === "1";
+const isPublicDemo = typeof process !== "undefined" && process.env.VERCEL === "1";
 
 type DemoOrganization = { id: string; owner_id: string; name: string; site: string; created_at: string };
 type DemoLine = { id: string; organization_id: string; name: string; code: string; product: string; status: string; target_rate: number; current_rate: number; quality_score: number; downtime_minutes: number; created_at: string };

@@ -7,8 +7,9 @@ export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 export function getDatabase(): D1Database {
-  if (!env.DB) throw new ApiError(503, "The workspace is temporarily unavailable. Please try again.");
-  return env.DB;
+  const db = env?.DB;
+  if (!db) throw new ApiError(503, "The workspace is temporarily unavailable. Please try again.");
+  return db;
 }
 /** Identity is supplied by Sites dispatch. Anonymous requests never share an owner. */
 export function getViewer(request: Request) {

@@ -4,11 +4,12 @@ import * as schema from "./schema";
 const env = (globalThis as typeof globalThis & { env?: { DB?: D1Database } }).env;
 
 export function getDb() {
-  if (!env.DB) {
+  const db = env?.DB;
+  if (!db) {
     throw new Error(
       "Cloudflare D1 binding `DB` is unavailable. Set the `d1` field in .openai/hosting.json to `DB` or let your control plane inject the real binding values before using the database."
     );
   }
 
-  return drizzle(env.DB, { schema });
+  return drizzle(db, { schema });
 }
